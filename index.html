@@ -1,0 +1,173 @@
+<!-- Crude Oil Exports Per Capita in 2018 Circle Map (Africa) -->
+<!DOCTYPE html>
+<head>
+    <title>Crude Oil Exports in Africa per Capita 2018</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.0/dist/leaflet.css"/>
+
+    <style>
+        #map { position: absolute; top: 0; bottom: 0; width: 960px; height: 540px; } 
+
+       
+        .legend-circle {
+            display: inline-block;
+            border-radius: 50%;
+            background-color: #ff7900;
+            margin-right: 5px;
+        }
+
+        .legend-label {
+            font-size: 12px;
+        }
+
+        
+        h1 {     
+            position: absolute;     
+            left: 50px;     
+            top: 10px;     
+            padding: 8px 2%;     
+            margin: 0;     
+            background: rgba(119, 94, 72, 0.6);     
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);     
+            border-radius: 3px;     
+            color: whitesmoke;     
+            font-size: 1.5em;    
+            z-index: 800;     
+        }
+
+
+        .legend-container {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            font-family: Arial, sans-serif;
+        }
+
+       
+        .legend-title {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+    </style> 
+
+</head>
+<body>
+    <div id="map"></div>
+    <h1>Crude Oil Exports in Africa per Capita, 2018</h1>
+    <script src="https://unpkg.com/leaflet@1.7.0/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-ajax/2.1.0/leaflet.ajax.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/1.3.4/chroma.min.js"></script>
+
+    <script>
+        var map = L.map('map', {
+            center: [5.5, 10.3],     
+            zoom: 3 
+        });
+
+        var CartoDB_VoyagerNoLabels = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
+        }).addTo(map);
+
+        // Scaling parameters
+        var minValue = 0.1;  // Minimum value as zero would break the code
+        var maxValue = 9.28; 
+        var minRadius = 6;   
+        var maxRadius = 30;  
+        var smallCircleBoost = 1.5;  // Boost multiplier for smaller circles 
+
+        // Scaling function to calculate radius based on OilExport value
+        function calcRadius(val) { 
+            if (typeof val !== 'number' || val < 0) { 
+                console.warn("Invalid value for OilExport:", val);
+                return minRadius; // Default small radius if the value is invalid, as some values are zero 
+            }
+
+            if (val === 0) {
+                return 0; // Return 0 radius for non-producing regions, makes tiny circles to show zero export
+            }
+
+            // Scale the radius proportionally between minRadius and maxRadius
+            const scale = (val - minValue) / (maxValue - minValue);
+            let radius = minRadius + scale * (maxRadius - minRadius);
+
+            // Apply a boost to smaller circles only
+            if (radius < 5) { 
+                radius *= smallCircleBoost; 
+            }
+
+            return radius;
+        }
+
+        
+        var countries = L.geoJson.ajax("assets/Africadata.geojson", {
+            attribution: 'Our World In Data map: Ian Berry',
+            pointToLayer: function (feature, latlng){
+                const OilExport = feature.properties.OilExport || 0;
+                const CountryName = feature.properties.Country || 0; //Displayes country name
+                const radius = calcRadius(OilExport);
+                
+                var circleMarker = L.circleMarker(latlng, {
+                    color: '#ff7900', 
+                    opacity: 1, 
+                    weight: 2, 
+                    fillColor: '#ff7900', 
+                    fillOpacity: 0.6, 
+                    radius: radius 
+                }).bindTooltip(
+                    `<strong>${CountryName}</strong><br>Oil Export: ${OilExport} cubic meters`,
+                    {permanent: false, direction: "top"}
+                );
+
+                // hover effect to change circle color
+                circleMarker.on({
+                    mouseover: function(e){
+                        this.setStyle({color: 'blue', fillColor: 'blue'});
+                    },
+                    mouseout: function(e){
+                        this.setStyle({color: '#ff7900', fillColor: '#ff7900'});
+                    }
+                });
+
+                return circleMarker;
+            }
+        });
+
+        countries.addTo(map);
+
+        // Add Circle Legend to the Map
+        var legend = L.control({position: 'bottomright'});
+
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'info legend legend-container');
+            var grades = [minValue, maxValue]; // Define the range for the legend
+            var labels = [];
+
+            // Add title to the legend
+            div.innerHTML = '<div class="legend-title">Oil Produced in Cubic Meters</div>';
+
+            // Loop through the grades to create a circle for each range
+            for (var i = 0; i < grades.length; i++) {
+                var radius = calcRadius(grades[i]);
+                // Create circle legend with specific sizes
+                labels.push(
+                    `<div class="legend-circle" style="width: ${radius * 2}px; height: ${radius * 2}px;"></div> 
+                    <span class="legend-label">${grades[i]} - ${grades[i] === maxValue ? 'Highest' : 'Lowest'}</span>`
+                );
+            }
+
+            div.innerHTML += labels.join('<br>');
+            return div;
+        };
+
+        legend.addTo(map);
+
+    </script>
+</body>
+</html>
